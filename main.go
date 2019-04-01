@@ -209,7 +209,7 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 
 			for k, _ := range cols {
 				val := reflect.Indirect(reflect.ValueOf(refs[k])).Interface()
-				tableName := fmt.Sprintf("%s;\n", val)
+				tableName := fmt.Sprintf("%s", val)
 				tables = append(tables, tableName)
 			}
 		}
@@ -219,7 +219,7 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 	//logs.Debug("[doWorkExportSchem] tables: %#v\n", tables)
 
 	for _, tbl := range tables {
-		addIf := fmt.Sprintf("DROP TABLE IF EXISTS `%s`;\n", tbl)
+		addIf := fmt.Sprintf("DROP TABLE IF EXISTS %s;\n", tbl)
 		output.WriteString(addIf)
 
 		querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tbl)
