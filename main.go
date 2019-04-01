@@ -142,6 +142,11 @@ func main() {
 		}
 	}
 
+	errDB = workArgs.DB.Ping()
+	if errDB != nil {
+		panic(errDB)
+	}
+
 	gspt.SetProcTitle(programName)
 
 	doWork(workArgs)
