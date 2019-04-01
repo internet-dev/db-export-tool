@@ -46,9 +46,9 @@ const programName = "db-export-tool"
 var workArgs workArgsT
 
 func init() {
-	flag.StringVar(&workArgs.DbType, "db-type", "", "set db type, support:mysql,postgres")
+	flag.StringVar(&workArgs.DbType, "db-type", "mysql", "set db type, support:mysql,postgres")
 	flag.StringVar(&workArgs.Database, "db-name", "", "database")
-	flag.StringVar(&workArgs.DbHost, "db-host", "", "set database host")
+	flag.StringVar(&workArgs.DbHost, "db-host", "127.0.0.1:3306", "set database host")
 	flag.StringVar(&workArgs.DbUser, "db-user", "", "database user")
 	flag.StringVar(&workArgs.DbPassword, "db-pwd", "", "database password")
 	flag.StringVar(&workArgs.DbCharset, "db-charset", "utf8", "charset")
