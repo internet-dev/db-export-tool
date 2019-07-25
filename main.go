@@ -65,7 +65,7 @@ func init() {
 }
 
 func errMsg(msg string, code int) {
-	fmt.Fprintln(os.Stdout, msg)
+	_, _ = fmt.Fprintln(os.Stdout, msg)
 
 	if code != 0 {
 		os.Exit(code)
@@ -73,7 +73,7 @@ func errMsg(msg string, code int) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stdout, programName+`
+	_, _ = fmt.Fprintf(os.Stdout, programName+`
 Usage:
   ./%s -h
   ./%s -db-type=mysql,postgres -db-name=db --table=t1,t2...|all -db-host=host -db-user=user -db-pwd=pwd [--output=./output]
@@ -137,6 +137,7 @@ func main() {
 	} else {
 		workArgs.EscapeFunc = tools.PgEscape
 		dsn := fmt.Sprintf(`postgres://%s:%s@%s/%s`, workArgs.DbUser, workArgs.DbPassword, workArgs.DbHost, workArgs.Database)
+		workArgs.DB, errDB = sql.Open("postgres", dsn)
 		if errDB != nil {
 			errMsg(fmt.Sprintf("can not connect to postgres, dsn: %s, err: %v", dsn, errDB), 111)
 		}
@@ -153,7 +154,7 @@ func main() {
 
 	// 关闭数据库连接
 	if workArgs.DB != nil {
-		workArgs.DB.Close()
+		_ = workArgs.DB.Close()
 	}
 }
 
@@ -165,7 +166,9 @@ func doWork(workArgs workArgsT) {
 			logs.Error("[doWork] can open file: %s, err: %s", workArgs.Output, err.Error())
 			os.Exit(20)
 		}
-		defer f.Close()
+		defer func() {
+			_ = f.Close()
+		}()
 
 		output = f
 	}
@@ -174,7 +177,10 @@ func doWork(workArgs workArgsT) {
 	comment := fmt.Sprintf("/* export %s by %s at: %d-%02d-%02d %02d:%02d:%02d */\n\n", workArgs.Model, programName,
 		timeNow.Year(), int(timeNow.Month()), timeNow.Day(),
 		timeNow.Hour(), timeNow.Minute(), timeNow.Second())
-	output.WriteString(comment)
+	_, err := output.WriteString(comment)
+	if err != nil {
+		logs.Warning("[doWork] write err: %v", err)
+	}
 
 	if workArgs.Model == "schema" {
 		doWorkExportSchema(workArgs, output)
@@ -190,7 +196,7 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 
 	if workArgs.Table == "all" {
 		querySQL := "SHOW TABLES"
-		logs.Debug("[doWorkExportSchem] sql: %s", querySQL)
+		logs.Debug("[doWorkExportSchema] sql: %s", querySQL)
 
 		rows, err := workArgs.DB.Query(querySQL)
 		if err != nil {
@@ -205,7 +211,10 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 				var ref interface{}
 				refs[i] = &ref
 			}
-			rows.Scan(refs...)
+			errS := rows.Scan(refs...)
+			if errS != nil {
+				logs.Error("[doWorkExportSchema] rows.Scan err: %v", errS)
+			}
 
 			for k, _ := range cols {
 				val := reflect.Indirect(reflect.ValueOf(refs[k])).Interface()
@@ -220,7 +229,10 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 
 	for _, tbl := range tables {
 		addIf := fmt.Sprintf("DROP TABLE IF EXISTS %s;\n", tbl)
-		output.WriteString(addIf)
+		_, errW := output.WriteString(addIf)
+		if errW != nil {
+			logs.Error("[doWorkExportSchema] write err: %v", errW)
+		}
 
 		querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tbl)
 		logs.Debug("[doWorkExportSchem] sql: %s", querySQL)
@@ -240,7 +252,7 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 				var ref interface{}
 				refs[i] = &ref
 			}
-			rows.Scan(refs...)
+			_ = rows.Scan(refs...)
 
 			for k, col := range cols {
 				logs.Debug("col:", col)
@@ -254,8 +266,8 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 		re := regexp.MustCompile(`AUTO_INCREMENT=(\d+) `)
 		createSQL = re.ReplaceAllString(createSQL, "")
 
-		output.WriteString(createSQL)
-		output.WriteString("\n")
+		_, _ = output.WriteString(createSQL)
+		_, _ = output.WriteString("\n")
 	}
 
 	logs.Informational("[doWorkExportSchem] jobs have done.")
@@ -283,13 +295,13 @@ func doWorkExportData(workArgs workArgsT, output *os.File) {
 			offset := i * chunkSize
 			querSQL := fmt.Sprintf(`SELECT * FROM %s LIMIT %d OFFSET %d`, workArgs.Table, chunkSize, offset)
 			logs.Debug("[doWorkExportData] sql: %s", querSQL)
-			output.WriteString(fmt.Sprintf("/** chunk: %d */\n", i))
+			_, _ = output.WriteString(fmt.Sprintf("/** chunk: %d */\n", i))
 			doWorkExportDataUseChunk(workArgs, output, querSQL)
 		}
 	} else {
 		sqlBytes, err := ioutil.ReadFile(workArgs.Input)
 		if err != nil {
-			fmt.Fprintf(os.Stdout, "cat not read sql file:%s, err: %s\n", workArgs.Input, err.Error())
+			_, _ = fmt.Fprintf(os.Stdout, "cat not read sql file:%s, err: %s\n", workArgs.Input, err.Error())
 			os.Exit(30)
 		}
 
@@ -333,9 +345,9 @@ func doWorkExportDataUseChunk(workArgs workArgsT, output *os.File, querySQL stri
 			colsNum = len(columns)
 
 			initSql := fmt.Sprintf("INSERT INTO %s (%s) VALUES\n", workArgs.Table, strings.Join(fieldBox, ", "))
-			output.WriteString(initSql)
+			_, _ = output.WriteString(initSql)
 		} else {
-			output.WriteString(",\n")
+			_, _ = output.WriteString(",\n")
 		}
 
 		//fmt.Println("fieldBox:", fieldBox)
@@ -347,7 +359,7 @@ func doWorkExportDataUseChunk(workArgs workArgsT, output *os.File, querySQL stri
 			var ref interface{}
 			refs[i] = &ref
 		}
-		rows.Scan(refs...)
+		_ = rows.Scan(refs...)
 
 		for k, col := range columns {
 			if skipFieldBox[col] {
@@ -359,12 +371,12 @@ func doWorkExportDataUseChunk(workArgs workArgsT, output *os.File, querySQL stri
 		}
 		vSql := fmt.Sprintf("(%s)", strings.Join(values, ", "))
 
-		output.WriteString(vSql)
+		_, _ = output.WriteString(vSql)
 		i++
 
 	}
 
-	output.WriteString(";\n\n")
+	_, _ = output.WriteString(";\n\n")
 
 	logs.Informational("[doWorkExportDataUseChunk] chunk jobs have done.")
 }
