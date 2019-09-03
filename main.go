@@ -344,7 +344,7 @@ func doWorkExportDataUseChunk(workArgs workArgsT, output *os.File, querySQL stri
 			}
 			colsNum = len(columns)
 
-			initSql := fmt.Sprintf("INSERT INTO %s (%s) VALUES\n", workArgs.Table, strings.Join(fieldBox, ", "))
+			initSql := fmt.Sprintf("INSERT INTO `%s` (`%s`) VALUES\n", workArgs.Table, strings.Join(fieldBox, "`, `"))
 			_, _ = output.WriteString(initSql)
 		} else {
 			_, _ = output.WriteString(",\n")
