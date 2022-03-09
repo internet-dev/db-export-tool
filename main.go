@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
 	"os"
 	"reflect"
@@ -15,8 +16,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 
-	"github.com/astaxie/beego/logs"
-	"github.com/erikdubbelboer/gspt"
 	"github.com/internet-dev/db-export-tool/pkg/tools"
 )
 
@@ -148,8 +147,6 @@ func main() {
 		panic(errDB)
 	}
 
-	gspt.SetProcTitle(programName)
-
 	doWork(workArgs)
 
 	// 关闭数据库连接
@@ -163,7 +160,7 @@ func doWork(workArgs workArgsT) {
 	if len(workArgs.Output) > 0 {
 		f, err := os.Create(workArgs.Output)
 		if err != nil {
-			logs.Error("[doWork] can open file: %s, err: %s", workArgs.Output, err.Error())
+			log.Printf("[doWork] can open file: %s, err: %s", workArgs.Output, err.Error())
 			os.Exit(20)
 		}
 		defer func() {
@@ -179,7 +176,7 @@ func doWork(workArgs workArgsT) {
 		timeNow.Hour(), timeNow.Minute(), timeNow.Second())
 	_, err := output.WriteString(comment)
 	if err != nil {
-		logs.Warning("[doWork] write err: %v", err)
+		log.Printf("[doWork] write err: %v", err)
 	}
 
 	if workArgs.Model == "schema" {
@@ -190,13 +187,13 @@ func doWork(workArgs workArgsT) {
 }
 
 func doWorkExportSchema(workArgs workArgsT, output *os.File) {
-	logs.Informational("[doWorkExportSchem] start work")
+	log.Printf("[doWorkExportSchem] start work")
 
 	var tables []string
 
 	if workArgs.Table == "all" {
 		querySQL := "SHOW TABLES"
-		logs.Debug("[doWorkExportSchema] sql: %s", querySQL)
+		log.Printf("[doWorkExportSchema] sql: %s", querySQL)
 
 		rows, err := workArgs.DB.Query(querySQL)
 		if err != nil {
@@ -213,7 +210,7 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 			}
 			errS := rows.Scan(refs...)
 			if errS != nil {
-				logs.Error("[doWorkExportSchema] rows.Scan err: %v", errS)
+				log.Printf("[doWorkExportSchema] rows.Scan err: %v", errS)
 			}
 
 			for k, _ := range cols {
@@ -231,11 +228,11 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 		addIf := fmt.Sprintf("DROP TABLE IF EXISTS %s;\n", tbl)
 		_, errW := output.WriteString(addIf)
 		if errW != nil {
-			logs.Error("[doWorkExportSchema] write err: %v", errW)
+			log.Printf("[doWorkExportSchema] write err: %v", errW)
 		}
 
 		querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tbl)
-		logs.Debug("[doWorkExportSchem] sql: %s", querySQL)
+		log.Printf("[doWorkExportSchem] sql: %s", querySQL)
 
 		var createSQL = ""
 
@@ -255,7 +252,7 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 			_ = rows.Scan(refs...)
 
 			for k, col := range cols {
-				logs.Debug("col:", col)
+				log.Printf("col:", col)
 				if col == "Create Table" {
 					val := reflect.Indirect(reflect.ValueOf(refs[k])).Interface()
 					createSQL = fmt.Sprintf("%s;\n", val)
@@ -270,14 +267,14 @@ func doWorkExportSchema(workArgs workArgsT, output *os.File) {
 		_, _ = output.WriteString("\n")
 	}
 
-	logs.Informational("[doWorkExportSchem] jobs have done.")
+	log.Printf("[doWorkExportSchem] jobs have done.")
 }
 
 func doWorkExportData(workArgs workArgsT, output *os.File) {
-	logs.Informational("[doWorkExportData] start work")
+	log.Printf("[doWorkExportData] start work")
 
 	if workArgs.Chunk {
-		logs.Informational("[doWorkExportData] use chunk")
+		log.Printf("[doWorkExportData] use chunk")
 		const chunkSize int64 = 1000
 
 		var total int64
@@ -289,14 +286,14 @@ func doWorkExportData(workArgs workArgsT, output *os.File) {
 		}
 
 		var pageTotal int64 = int64(math.Ceil(float64(total) / float64(chunkSize)))
-		logs.Debug("[doWorkExportData] pageTotal: %d", pageTotal)
+		log.Printf("[doWorkExportData] pageTotal: %d", pageTotal)
 
 		for i := int64(0); i < pageTotal; i++ {
 			offset := i * chunkSize
-			querSQL := fmt.Sprintf(`SELECT * FROM %s LIMIT %d OFFSET %d`, workArgs.Table, chunkSize, offset)
-			logs.Debug("[doWorkExportData] sql: %s", querSQL)
+			querySQL := fmt.Sprintf(`SELECT * FROM %s LIMIT %d OFFSET %d`, workArgs.Table, chunkSize, offset)
+			log.Printf("[doWorkExportData] sql: %s", querySQL)
 			_, _ = output.WriteString(fmt.Sprintf("/** chunk: %d */\n", i))
-			doWorkExportDataUseChunk(workArgs, output, querSQL)
+			doWorkExportDataUseChunk(workArgs, output, querySQL)
 		}
 	} else {
 		sqlBytes, err := ioutil.ReadFile(workArgs.Input)
@@ -309,12 +306,12 @@ func doWorkExportData(workArgs workArgsT, output *os.File) {
 		doWorkExportDataUseChunk(workArgs, output, querySQL)
 	}
 
-	logs.Informational("[doWorkExportData] jobs have done.")
+	log.Printf("[doWorkExportData] jobs have done.")
 }
 
 func doWorkExportDataUseChunk(workArgs workArgsT, output *os.File, querySQL string) {
-	logs.Informational("[doWorkExportDataUseChunk] chunk jobs start.")
-	logs.Debug("sql:", querySQL)
+	log.Printf("[doWorkExportDataUseChunk] chunk jobs start.")
+	log.Printf("sql:", querySQL)
 
 	rows, err := workArgs.DB.Query(querySQL)
 	if err != nil {
@@ -378,5 +375,5 @@ func doWorkExportDataUseChunk(workArgs workArgsT, output *os.File, querySQL stri
 
 	_, _ = output.WriteString(";\n\n")
 
-	logs.Informational("[doWorkExportDataUseChunk] chunk jobs have done.")
+	log.Printf("[doWorkExportDataUseChunk] chunk jobs have done.")
 }
